@@ -1,0 +1,81 @@
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: said_postgres
+    environment:
+      POSTGRES_DB: BD_SAID
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - said_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # pgAdmin
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: said_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@said.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - said_network
+
+  # Django Backend
+  backend:
+    build: ./backend
+    container_name: said_backend
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_NAME: BD_SAID
+      DB_USER: postgres
+      DB_PASSWORD: postgres123
+      DB_HOST: db
+      DB_PORT: 5432
+    command: >
+      sh -c "sleep 15 && python manage.py runserver 0.0.0.0:8000"
+    networks:
+      - said_network
+
+  # React Frontend
+  frontend:
+    build: ./frontend
+    container_name: said_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    environment:
+      # Esta línea es la que faltaba - lee del archivo .env
+      REACT_APP_API_HOST: ${REACT_APP_API_HOST}
+    networks:
+      - said_network
+
+volumes:
+  postgres_data:
+
+networks:
+  said_network:
+    driver: bridge
